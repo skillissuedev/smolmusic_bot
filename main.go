@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"slices"
@@ -68,8 +70,6 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-
-	//bot.Debug = true
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
@@ -138,7 +138,7 @@ func main() {
                 }
 
                 playlist_name := args_list[0]
-                playlist(playlist_name, bot, chat_id, msg_id)
+                go playlist(playlist_name, bot, chat_id, msg_id)
             } else if update.Message.Command() == "remove" {
                 if update.Message.ReplyToMessage == nil {
                     message_text := "To remove a song from a playlist use this command while replying to it"
@@ -148,8 +148,18 @@ func main() {
                     bot.Send(message)
                     continue
                 }
-                remove(update.Message.ReplyToMessage, bot, chat_id, msg_id)
-                //playlist(playlist_name, bot, chat_id, msg_id)
+                go remove(update.Message.ReplyToMessage, bot, chat_id, msg_id)
+            } else if update.Message.Command() == "lyrics" {
+                if update.Message.ReplyToMessage == nil {
+                    message_text := "To get lyrics of the song, use this command while replying to it"
+
+                    message := tgbotapi.NewMessage(chat_id, message_text)
+                    message.ReplyToMessageID = msg_id
+                    bot.Send(message)
+                    continue
+                }
+
+                go lyrics(update.Message.ReplyToMessage, bot, chat_id, msg_id)
             } else if update.Message.Command() == "removeplaylist" {
                 args_list := strings.Split(args, " ")
                 if len(args_list) != 1 {
@@ -161,8 +171,7 @@ func main() {
                     continue
                 }
 
-                remove_playlist(args_list[0], bot, chat_id, msg_id)
-                //playlist(playlist_name, bot, chat_id, msg_id)
+                go remove_playlist(args_list[0], bot, chat_id, msg_id)
             }
         }
     }
@@ -337,6 +346,7 @@ func remove(reply_message *tgbotapi.Message, bot *tgbotapi.BotAPI, chat_id int64
         return
     }
 
+    /*
     playlist_file, playlist_err := os.ReadFile(playlist_path)
     if playlist_err != nil {
         fmt.Println("remove(): Failed to read the playlist file\nErr:", playlist_err.Error())
@@ -345,13 +355,13 @@ func remove(reply_message *tgbotapi.Message, bot *tgbotapi.BotAPI, chat_id int64
     json_unmarshal_err := json.Unmarshal(playlist_file, &playlist_data)
     if json_unmarshal_err != nil {
         fmt.Println("remove(): failed to unmarshal the json data!\nErr:", json_unmarshal_err.Error())
-    }
+    }*/
 
     audio_file_name := reply_message.Audio.FileName
     split_file_name := strings.Split(audio_file_name, "_")
     playlist_name := strings.ReplaceAll(split_file_name[len(split_file_name) - 1], ".mp3", "")
     fmt.Println(playlist_name)
-    playlist := playlist_data[playlist_name]
+    playlist := playlists[playlist_name]
     ids_to_remove := make([]int, 0)
     for i := 0; i < len(playlist); i++ {
         if playlist[i].FileName == audio_file_name {
@@ -374,10 +384,10 @@ func remove(reply_message *tgbotapi.Message, bot *tgbotapi.BotAPI, chat_id int64
     }
 
     fmt.Println(playlist)
-    playlist_data[playlist_name] = playlist
+    playlists[playlist_name] = playlist
 
 
-    json_playlists, json_playlists_error := json.Marshal(playlist_data)
+    json_playlists, json_playlists_error := json.Marshal(playlists)
     if json_playlists_error != nil {
         fmt.Println("remove(): failed to marshal the json data!\nErr:", json_playlists_error.Error())
     }
@@ -444,3 +454,56 @@ func remove_playlist(playlist string, bot *tgbotapi.BotAPI, chat_id int64, reply
     }
 }
 
+func lyrics(reply_message *tgbotapi.Message, bot *tgbotapi.BotAPI, chat_id int64, reply_to_message_id int) {
+    if reply_message.Audio == nil {
+        message_text := "To get song's lyrics use this command while replying to it"
+
+        message := tgbotapi.NewMessage(chat_id, message_text)
+        message.ReplyToMessageID = reply_to_message_id
+        bot.Send(message)
+        return
+    }
+    artist := reply_message.Audio.Performer
+    name := reply_message.Audio.Title
+    req_response, req_err := http.Get("https://lyrix.vercel.app/getLyricsByName/" + artist + "/" + name)
+
+    if req_err != nil {
+        fmt.Println("lyrics(): Request error!", req_err.Error())
+        failed_message := tgbotapi.NewMessage(chat_id, "Failed to get song's lyrics!")
+        failed_message.ReplyToMessageID = reply_to_message_id
+        bot.Send(failed_message)
+        return
+    }
+    body, err := io.ReadAll(req_response.Body)
+
+    if err != nil {
+        fmt.Println("lyrics(): Failed to read body of the response! The song is ", name, "by", artist, "Err:", err.Error())
+        failed_message := tgbotapi.NewMessage(chat_id, "Failed to get song's lyrics!")
+        failed_message.ReplyToMessageID = reply_to_message_id
+        bot.Send(failed_message)
+        return
+    }
+
+    lyrics_response := ""
+    for _,json_line := range strings.Split(string(body), "\n") {
+        if strings.Contains(json_line, "\"words\"") {
+            line_parts := strings.Split(json_line, "\"") // line_parts[3] is an actual line from the song
+            line := line_parts[3]
+            line = strings.ReplaceAll(line, "♪", "\n")
+            lyrics_response = lyrics_response + "\n" + line
+        }
+    }
+
+    var message tgbotapi.MessageConfig
+    if lyrics_response == "" {
+        message = tgbotapi.NewMessage(chat_id, "Unable to get lyrics of this song!")
+    } else {
+        message = tgbotapi.NewMessage(chat_id, lyrics_response)
+    }
+    message.ReplyToMessageID = reply_to_message_id
+    bot.Send(message)
+}
+
+type Lyrics struct {
+    lines []map[string]string
+}

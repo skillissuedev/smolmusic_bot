@@ -4,10 +4,10 @@ A Telegram bot for downloading and organizing music. Still work in progress (but
 # Features
 - [x] Downloading music from YouTube
 - [x] Creating, deleting playlists
+- [x] Viewing lyrics
 
 # Work in progress
 - [ ] Sharing playlists
-- [ ] Viewing song's lyrics
 - [ ] Searching YouTube without leaving Telegram
 - [ ] Buttons for controlling bot without using commands
 
@@ -25,10 +25,11 @@ A Telegram bot for downloading and organizing music. Still work in progress (but
 - Run the bot
 
 # Usage
-For now bot is controlled with commands (hopefully changing it in future.)
+For now bot is controlled with commands (going to change this in the future)
 - `/download <youtube link>` - downloads the specified video from youtube as an audio file and sends it to the user
 - `/addtoplaylist <youtube link> <playlist name>` - downloads the specified video from youtube and adds it to the playlist
 - `/playlist <playlist name>` - sends all songs in the requested playlist to the user
 - `/loadplaylist <youtube link> <playlist name>` - adds all songs from the YouTube playlist to the specified playlist
 - `/remove` - removes the song user replied to from the playlist
 - `/removeplaylist <playlist name>` - removes user's playlist
+- `/lyrics` - shows lyrics of the song user replied to
