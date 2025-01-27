@@ -9,12 +9,11 @@ A Telegram bot for downloading and organizing music. Still work in progress (but
 # Work in progress
 - [ ] Sharing playlists
 - [ ] Searching YouTube without leaving Telegram
-- [ ] Buttons for controlling bot without using commands
 
 # Requirements
 - A Telegram account (bot sends all audio files to this account and then forwards them to users)
 - Installed ffmpeg and yt-dlp
-- You're running Linux (bot is not tested on Windows, still WIP)
+- You're running Linux
 
 # Installation
 - Make sure that yt-dlp and ffmpeg are installed
