@@ -465,7 +465,10 @@ func lyrics(reply_message *tgbotapi.Message, bot *tgbotapi.BotAPI, chat_id int64
     }
     artist := reply_message.Audio.Performer
     name := reply_message.Audio.Title
-    req_response, req_err := http.Get("https://lyrix.vercel.app/getLyricsByName/" + artist + "/" + name)
+    artist_no_scapes := strings.ReplaceAll(artist, " ", "+")
+    name_no_scapes := strings.ReplaceAll(name, " ", "+")
+    req := "https://lrclib.net/api/get?artist_name=" + artist_no_scapes + "&" + "track_name=" + name_no_scapes
+    req_response, req_err := http.Get(req)
 
     if req_err != nil {
         fmt.Println("lyrics(): Request error!", req_err.Error())
@@ -474,25 +477,38 @@ func lyrics(reply_message *tgbotapi.Message, bot *tgbotapi.BotAPI, chat_id int64
         bot.Send(failed_message)
         return
     }
-    body, err := io.ReadAll(req_response.Body)
+    body, json_err := io.ReadAll(req_response.Body)
 
-    if err != nil {
-        fmt.Println("lyrics(): Failed to read body of the response! The song is ", name, "by", artist, "Err:", err.Error())
+    if json_err != nil {
+        fmt.Println("lyrics(): Failed to read body of the response! The song is ", name, "by", artist, "Err:", json_err.Error())
         failed_message := tgbotapi.NewMessage(chat_id, "Failed to get song's lyrics!")
         failed_message.ReplyToMessageID = reply_to_message_id
         bot.Send(failed_message)
         return
     }
 
-    lyrics_response := ""
-    for _,json_line := range strings.Split(string(body), "\n") {
-        if strings.Contains(json_line, "\"words\"") {
-            line_parts := strings.Split(json_line, "\"") // line_parts[3] is an actual line from the song
-            line := line_parts[3]
-            line = strings.ReplaceAll(line, "♪", "\n")
-            lyrics_response = lyrics_response + "\n" + line
-        }
+    json_unmarshaled := make(map[string]interface{})
+    json_err = json.Unmarshal([]byte(body), &json_unmarshaled)
+
+    if json_err != nil {
+        fmt.Println("lyrics(): Failed to unmarshal JSON! The song is ", name, "by", artist, "Err:", json_err.Error())
+        failed_message := tgbotapi.NewMessage(chat_id, "Failed to get song's lyrics!")
+        failed_message.ReplyToMessageID = reply_to_message_id
+        bot.Send(failed_message)
+        return
     }
+
+    if _, ok := json_unmarshaled["plainLyrics"]; !ok {
+        fmt.Println("lyrics(): No plainLyrics in the JSON! The song is ", name, "by", artist)
+        fmt.Println(json_unmarshaled)
+        failed_message := tgbotapi.NewMessage(chat_id, "Failed to get song's lyrics!")
+        failed_message.ReplyToMessageID = reply_to_message_id
+        bot.Send(failed_message)
+        return
+    }
+
+    lyrics_response := json_unmarshaled["plainLyrics"].(string)
+
 
     var message tgbotapi.MessageConfig
     if lyrics_response == "" {
